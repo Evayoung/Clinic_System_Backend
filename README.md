@@ -178,13 +178,13 @@ clinic/
 
 Get a glimpse of route docs !
 
-| Shot 1 | Shot 2 |
-| :---------------------------------: | :---------------------------------: |
-| ![Shot 1](screenshots/screenshot.png) | ![Shot 2](screenshots/screenshot.png) |
+|                 Shot 1                  |                 Shot 2                  |
+|:---------------------------------------:|:---------------------------------------:|
+| ![Shot 1](screenshots/Screenshot_1.png) | ![Shot 2](screenshots/Screenshot_2.png) |
 
-| Shot 3 | Shot 4 |
-| :---------------------------------: | :---------------------------------: |
-| ![Shot 3](screenshots/screenshot.png) | ![Shot 4](screenshots/screenshot.png) |
+|                 Shot 3                  | Shot 4 |
+|:---------------------------------------:| :---------------------------------: |
+| ![Shot 3](screenshots/Screenshot_5.png) | ![Shot 4](screenshots/Screenshot_6.png) |
 
 
 ## Technologies
