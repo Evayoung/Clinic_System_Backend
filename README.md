@@ -200,7 +200,7 @@ Get a glimpse of route docs !
 
 1. **Clone the Repository**:
     ```bash
-    git clone https://github.com/your-username/clinic-management-backend.git 
+    git clone https://github.com/Evayoung/Clinic_System_Backend.git 
     cd clinic-management-backend
     ```
 
