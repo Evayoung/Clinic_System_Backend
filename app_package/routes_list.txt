@@ -1,0 +1,90 @@
+1. Authentication Routes:
+    - POST /auth/user/login
+    - POST /auth/student/login
+    - POST /auth/reset-password
+
+2. Admin Routes:
+    - POST /admin/users
+    - GET /admin/users
+    - GET /admin/users/{user_id}
+    - PUT /admin/users/{user_id}
+    - DELETE /admin/users/{user_id}
+    - POST /admin/create-students
+    - GET /admin/students
+    - PUT /admin/students/{student_id}
+    - DELETE /admin/student/{student_id}
+    - GET /admin/faculties
+    - POST /admin/faculties
+    - PUT /admin/update-faculty/{faculty_id}
+    - GET /admin/departments
+    - POST /admin/departments
+    - PUT /admin/update-departments/{department_id}
+    - GET /admin/get-levels
+    - POST /admin/levels
+    - PUT /admin/update-level/{level_id}
+    - GET /admin/get-sessions
+    - POST /admin/sessions
+    - POST /admin/update-sessions/{session_id}
+    - GET /admin/admin/get-admin-dashboard
+    - POST /admin/super-admin/signup
+
+3. Student Routes:
+    - POST /students/create-students
+    - GET /students/full-profile
+    - GET /students/me
+    - PUT /students/me
+    - GET /students/me/digital-card
+    - POST /students/visits
+    - GET /students/me/schedules
+    - POST /students/schedules
+    - GET /students/me/prescriptions
+    - GET /students/faculties
+    - GET /students/read-department/
+    - GET /students/get-levels
+    - GET /students/get-sessions
+    - POST /students/complaints
+    - GET /students/me/all-visits
+    - GET /students/me/visits/{visit_id}
+    - GET /students/schedules/available
+    - GET /students/students/me/dashboard
+
+4. Doctor Routes:
+    - POST /doctor/availabilities
+    - GET /doctor/availabilities
+    - POST /doctor/availability/{availability_id}
+    - DELETE /doctor/availability/{availability_id}
+    - GET /doctor/schedules
+    - POST /doctor/schedules
+    - PUT /doctor/schedules/{schedule_id}
+    - POST /doctor/visits
+    - POST /doctor/diagnoses
+    - POST /doctor/prescriptions
+    - POST /doctor/complaints
+    - PUT /doctor/schedules/{schedule_id}/cancel
+    - GET /doctor/doctor/visits/{visit_id}/details
+    - GET /doctor/doctors/me/get-doctors-dashboard
+    - GET /doctor/doctor/visits
+    - GET /doctor/visits/{visit_id}/diagnoses
+    - GET /doctor/visits/{visit_id}/prescriptions
+    - POST /doctor/visits/{visit_id}/complete
+    - POST /doctor/create-multi-prescriptions
+
+5. Pharmacist Routes:
+    - GET /pharmacist/students/search
+    - GET /pharmacist/prescriptions
+    - GET /pharmacist/dispensed_drugs
+    - POST /pharmacist/dispensations
+    - POST /pharmacist/drugs
+    - PUT /pharmacist/drugs/{drug_id}
+    - DELETE /pharmacist/drugs/{drug_id}
+
+6. Lab Attendant Routes:
+    - POST /lab/create-records/
+    - PUT /lab/update-records
+    - GET /lab/get-all-records/
+    - GET /lab/get-health-records
+
+7. General Routes:
+    - GET /general/drugs
+    - GET /general/students/{student_id}
+    - GET /general/available-schedules

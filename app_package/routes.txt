@@ -1,0 +1,1012 @@
+Thank you for clarifying that you haven’t implemented the routes yet and would like me to help group all the necessary routes for the University of Ilorin clinic management system by categories and endpoints, including the data structures for both the query (request) and response. I’ll focus exclusively on this task, avoiding route implementation details to keep the conversation clear and focused, as requested. The routes will align with the finalized `models.py` (16 tables + `AccessLog`) and support the key features: student records, schedules, digital cards, and basic health status. I’ll use **FastAPI** as the assumed framework (since it’s modern and suitable, as discussed), but the data structures will be framework-agnostic (usable in Flask or others). Please confirm if you prefer a different framework or have specific requirements (e.g., sync vs. async, auth method) when you start routing.
+
+### Route Grouping and Data Structures
+I’ll organize the routes into categories based on user roles and system features, ensuring coverage for all functionalities (authentication, admin management, student portal, doctor workflow, pharmacist tasks, lab attendant tasks, and shared data access). For each endpoint, I’ll provide:
+- **HTTP Method and Path**: The endpoint’s method (e.g., POST, GET) and URL path.
+- **Description**: What the endpoint does and its purpose.
+- **Access Control**: Who can access it (e.g., public, admin, authenticated student).
+- **Query (Request) Data Structure**: The expected input (JSON or query parameters) with field types and descriptions.
+- **Response Data Structure**: The expected output (JSON) with field types and descriptions.
+- **Notes**: Any additional considerations (e.g., validation, logging).
+
+The data structures are defined in a JSON-like format (inspired by Pydantic models for clarity) but are generic enough for any framework. I’ll use Python type hints for precision (e.g., `str`, `int`, `date`). Optional fields are marked with `Optional[type]` (equivalent to `type | None`).
+
+#### Assumptions
+- **Authentication**:
+  - **Users** (admin, doctor, pharmacist, lab_attendant): JWT-based, using `username` and `password` from `User` table. JWT includes `user_id` and `role`.
+  - **Students**: JWT-based, using `matriculation_number` and `password` from `Student` table. JWT includes `student_id`.
+- **Database**: PostgreSQL, using the `models.py` schema.
+- **Response Format**: JSON, with HTTP status codes (e.g., 200 OK, 404 Not Found).
+- **Error Handling**: Standardized error responses (e.g., `{ "detail": str }` for 400, 403, 404).
+- **Pagination**: For list endpoints, use query parameters `skip` (int, default 0) and `limit` (int, default 10).
+- **Logging**: All write operations (POST, PUT, DELETE) log to `AccessLog` with `user_id`, `student_id` (if applicable), `action`, and `ip_address`.
+
+### Route Categories and Endpoints
+Below are the grouped routes, categorized by user role and feature, with detailed data structures for requests and responses.
+
+#### 1. Authentication Routes
+Handles login for users (admin, doctor, pharmacist, lab_attendant) and students.
+
+- **POST /auth/user/login**
+  - **Description**: Authenticates a user and returns a JWT for accessing protected routes.
+  - **Access**: Public
+  - **Request**:
+    ```json
+    {
+      "username": str,  // User’s username (e.g., "dr_john")
+      "password": str   // User’s password (plain text, to be verified)
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    {
+      "access_token": str,  // JWT token (e.g., "eyJ...")
+      "token_type": str     // Token type (always "bearer")
+    }
+    ```
+  - **Error Responses**:
+    - 401 Unauthorized: `{ "detail": "Invalid credentials" }`
+    - 403 Forbidden: `{ "detail": "User is inactive" }`
+  - **Notes**: Verify `username` and `password` against `User`, check `status=active`, log login to `AccessLog`.
+
+- **POST /auth/student/login**
+  - **Description**: Authenticates a student and returns a JWT for accessing student portal routes.
+  - **Access**: Public
+  - **Request**:
+    ```json
+    {
+      "matriculation_number": str,  // Student’s matric number (e.g., "UIL/12345")
+      "password": str              // Student’s password (plain text)
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    {
+      "access_token": str,  // JWT token
+      "token_type": str     // "bearer"
+    }
+    ```
+  - **Error Responses**:
+    - 401 Unauthorized: `{ "detail": "Invalid credentials" }`
+    - 403 Forbidden: `{ "detail": "Student is inactive" }`
+  - **Notes**: Verify `matriculation_number` and `password` against `Student`, check `status=active`, log login to `AccessLog`.
+
+#### 2. Admin Routes
+Manages users (CRUD) and static data (faculties, departments, levels, academic sessions).
+
+- **POST /users**
+  - **Description**: Creates a new user (admin, doctor, pharmacist, lab_attendant).
+  - **Access**: Admin only
+  - **Request**:
+    ```json
+    {
+      "username": str,              // Unique username (e.g., "dr_smith")
+      "password": str,              // Password (will be hashed)
+      "role": str,                  // Enum: "doctor", "admin", "pharmacist", "lab_attendant"
+      "email": str,                 // Unique email (e.g., "smith@unilorin.edu.ng")
+      "phone": Optional[str],       // Phone number (e.g., "+2341234567890")
+      "status": Optional[str]       // Enum: "active", "inactive" (default: "active")
+    }
+    ```
+  - **Response** (201 Created):
+    ```json
+    {
+      "user_id": int,               // Created user ID (e.g., 1)
+      "username": str,
+      "role": str,
+      "email": str,
+      "phone": Optional[str],
+      "status": str,
+      "created_at": datetime,       // Creation timestamp
+      "updated_at": Optional[datetime],
+      "last_login": Optional[datetime]
+    }
+    ```
+  - **Error Responses**:
+    - 400 Bad Request: `{ "detail": "Username or email already exists" }`
+    - 403 Forbidden: `{ "detail": "Admin access required" }`
+  - **Notes**: Hash password, validate `role` and `status`, log to `AccessLog` with action “create_user”.
+
+- **GET /users**
+  - **Description**: Lists all users (paginated).
+  - **Access**: Admin only
+  - **Request** (Query Parameters):
+    ```json
+    {
+      "skip": Optional[int],  // Offset (default: 0)
+      "limit": Optional[int]  // Max items (default: 10)
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    [
+      {
+        "user_id": int,
+        "username": str,
+        "role": str,
+        "email": str,
+        "phone": Optional[str],
+        "status": str,
+        "created_at": datetime,
+        "updated_at": Optional[datetime],
+        "last_login": Optional[datetime]
+      }
+    ]
+    ```
+  - **Error Responses**:
+    - 403 Forbidden: `{ "detail": "Admin access required" }`
+  - **Notes**: Order by `created_at` DESC, log action “list_users”.
+
+- **GET /users/{user_id}**
+  - **Description**: Gets details of a specific user.
+  - **Access**: Admin only
+  - **Request**: Path parameter `user_id` (int)
+  - **Response** (200 OK):
+    ```json
+    {
+      "user_id": int,
+      "username": str,
+      "role": str,
+      "email": str,
+      "phone": Optional[str],
+      "status": str,
+      "created_at": datetime,
+      "updated_at": Optional[datetime],
+      "last_login": Optional[datetime]
+    }
+    ```
+  - **Error Responses**:
+    - 404 Not Found: `{ "detail": "User not found" }`
+    - 403 Forbidden: `{ "detail": "Admin access required" }`
+  - **Notes**: Log action “view_user”.
+
+- **PUT /users/{user_id}**
+  - **Description**: Updates a user’s details (e.g., role, status, phone).
+  - **Access**: Admin only
+  - **Request**:
+    ```json
+    {
+      "username": Optional[str],    // New username (must be unique)
+      "password": Optional[str],    // New password (hash if provided)
+      "role": Optional[str],        // Enum: "doctor", "admin", "pharmacist", "lab_attendant"
+      "email": Optional[str],       // New email (must be unique)
+      "phone": Optional[str],       // New phone
+      "status": Optional[str]       // Enum: "active", "inactive"
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    {
+      "user_id": int,
+      "username": str,
+      "role": str,
+      "email": str,
+      "phone": Optional[str],
+      "status": str,
+      "created_at": datetime,
+      "updated_at": datetime,
+      "last_login": Optional[datetime]
+    }
+    ```
+  - **Error Responses**:
+    - 404 Not Found: `{ "detail": "User not found" }`
+    - 400 Bad Request: `{ "detail": "Username or email already exists" }`
+    - 403 Forbidden: `{ "detail": "Admin access required" }`
+  - **Notes**: Only update provided fields, log action “update_user”.
+
+- **DELETE /users/{user_id}**
+  - **Description**: Soft-deletes a user (sets `status=inactive`).
+  - **Access**: Admin only
+  - **Request**: Path parameter `user_id` (int)
+  - **Response** (200 OK):
+    ```json
+    {
+      "detail": "User deactivated"
+    }
+    ```
+  - **Error Responses**:
+    - 404 Not Found: `{ "detail": "User not found" }`
+    - 403 Forbidden: `{ "detail": "Admin access required" }`
+  - **Notes**: Log action “deactivate_user”.
+
+- **POST /faculties**
+  - **Description**: Creates a new faculty.
+  - **Access**: Admin only
+  - **Request**:
+    ```json
+    {
+      "faculty_name": str  // Unique faculty name (e.g., "Faculty of Medicine")
+    }
+    ```
+  - **Response** (201 Created):
+    ```json
+    {
+      "faculty_id": int,
+      "faculty_name": str,
+      "created_at": datetime,
+      "updated_at": Optional[datetime]
+    }
+    ```
+  - **Error Responses**:
+    - 400 Bad Request: `{ "detail": "Faculty name already exists" }`
+    - 403 Forbidden: `{ "detail": "Admin access required" }`
+  - **Notes**: Log action “create_faculty”.
+
+- **GET /faculties**
+  - **Description**: Lists all faculties.
+  - **Access**: Admin, Doctor, Student (read-only for non-admins)
+  - **Request** (Query Parameters):
+    ```json
+    {
+      "skip": Optional[int],
+      "limit": Optional[int]
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    [
+      {
+        "faculty_id": int,
+        "faculty_name": str,
+        "created_at": datetime,
+        "updated_at": Optional[datetime]
+      }
+    ]
+    ```
+  - **Error Responses**: None
+  - **Notes**: Log action “list_faculties” for admins.
+
+- **POST /departments**
+  - **Description**: Creates a new department.
+  - **Access**: Admin only
+  - **Request**:
+    ```json
+    {
+      "faculty_id": int,       // FK to faculties
+      "department_name": str   // Department name (e.g., "Computer Science")
+    }
+    ```
+  - **Response** (201 Created):
+    ```json
+    {
+      "department_id": int,
+      "faculty_id": int,
+      "department_name": str,
+      "created_at": datetime,
+      "updated_at": Optional[datetime]
+    }
+    ```
+  - **Error Responses**:
+    - 400 Bad Request: `{ "detail": "Faculty ID not found" }`
+    - 400 Bad Request: `{ "detail": "Department name already exists in faculty" }`
+    - 403 Forbidden: `{ "detail": "Admin access required" }`
+  - **Notes**: Validate `faculty_id`, log action “create_department”.
+
+- **GET /departments**
+  - **Description**: Lists all departments.
+  - **Access**: Admin, Doctor, Student
+  - **Request** (Query Parameters):
+    ```json
+    {
+      "skip": Optional[int],
+      "limit": Optional[int]
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    [
+      {
+        "department_id": int,
+        "faculty_id": int,
+        "department_name": str,
+        "created_at": datetime,
+        "updated_at": Optional[datetime]
+      }
+    ]
+    ```
+  - **Notes**: Log action “list_departments” for admins.
+
+- **POST /levels**
+  - **Description**: Creates a new academic level (e.g., 100 Level).
+  - **Access**: Admin only
+  - **Request**:
+    ```json
+    {
+      "level_name": str  // Unique level name (e.g., "100 Level")
+    }
+    ```
+  - **Response** (201 Created):
+    ```json
+    {
+      "level_id": int,
+      "level_name": str,
+      "created_at": datetime,
+      "updated_at": Optional[datetime]
+    }
+    ```
+  - **Error Responses**:
+    - 400 Bad Request: `{ "detail": "Level name already exists" }`
+    - 403 Forbidden: `{ "detail": "Admin access required" }`
+  - **Notes**: Log action “create_level”.
+
+- **GET /levels**
+  - **Description**: Lists all levels.
+  - **Access**: Admin, Doctor, Student
+  - **Request** (Query Parameters):
+    ```json
+    {
+      "skip": Optional[int],
+      "limit": Optional[int]
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    [
+      {
+        "level_id": int,
+        "level_name": str,
+        "created_at": datetime,
+        "updated_at": Optional[datetime]
+      }
+    ]
+    ```
+  - **Notes**: Log action “list_levels” for admins.
+
+- **POST /academic-sessions**
+  - **Description**: Creates a new academic session (e.g., 2024/2025).
+  - **Access**: Admin only
+  - **Request**:
+    ```json
+    {
+      "session_name": str  // Unique session name (e.g., "2024/2025")
+    }
+    ```
+  - **Response** (201 Created):
+    ```json
+    {
+      "session_id": int,
+      "session_name": str,
+      "created_at": datetime,
+      "updated_at": Optional[datetime]
+    }
+    ```
+  - **Error Responses**:
+    - 400 Bad Request: `{ "detail": "Session name already exists" }`
+    - 403 Forbidden: `{ "detail": "Admin access required" }`
+  - **Notes**: Log action “create_session”.
+
+- **GET /academic-sessions**
+  - **Description**: Lists all academic sessions.
+  - **Access**: Admin, Doctor, Student
+  - **Request** (Query Parameters):
+    ```json
+    {
+      "skip": Optional[int],
+      "limit": Optional[int]
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    [
+      {
+        "session_id": int,
+        "session_name": str,
+        "created_at": datetime,
+        "updated_at": Optional[datetime]
+      }
+    ]
+    ```
+  - **Notes**: Log action “list_sessions” for admins.
+
+#### 3. Student Routes
+Handles student portal features: viewing profile, digital card, health records, and booking appointments.
+
+- **GET /students/me**
+  - **Description**: Gets the logged-in student’s details.
+  - **Access**: Authenticated student
+  - **Request**: None (uses JWT `student_id`)
+  - **Response** (200 OK):
+    ```json
+    {
+      "student_id": int,
+      "matriculation_number": str,
+      "first_name": str,
+      "surname": str,
+      "email": str,
+      "session_id": int,
+      "phone": str,
+      "date_of_birth": date,
+      "gender": str,              // Enum: "male", "female", "other"
+      "address": Optional[str],
+      "faculty_id": int,
+      "department_id": int,
+      "level_id": int,
+      "emergency_contact": Optional[str],
+      "profile_picture": Optional[str],
+      "status": str,              // Enum: "active", "inactive"
+      "created_at": datetime,
+      "updated_at": Optional[datetime],
+      "last_login": Optional[datetime]
+    }
+    ```
+  - **Error Responses**:
+    - 401 Unauthorized: `{ "detail": "Invalid token" }`
+  - **Notes**: Log action “view_profile”.
+
+- **GET /students/me/digital-card**
+  - **Description**: Gets the student’s digital clinic card.
+  - **Access**: Authenticated student
+  - **Request**: None (uses JWT `student_id`)
+  - **Response** (200 OK):
+    ```json
+    {
+      "card_id": int,
+      "student_id": int,
+      "clinic_number": str,
+      "issue_date": date,
+      "expiry_date": Optional[date],
+      "status": str,              // Enum: "active", "inactive"
+      "created_at": datetime,
+      "updated_at": Optional[datetime]
+    }
+    ```
+  - **Error Responses**:
+    - 404 Not Found: `{ "detail": "Digital card not found" }`
+    - 401 Unauthorized: `{ "detail": "Invalid token" }`
+  - **Notes**: Log action “view_digital_card”.
+
+- **GET /students/me/health-records**
+  - **Description**: Lists the student’s health records.
+  - **Access**: Authenticated student
+  - **Request** (Query Parameters):
+    ```json
+    {
+      "skip": Optional[int],
+      "limit": Optional[int]
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    [
+      {
+        "health_record_id": int,
+        "student_id": int,
+        "blood_group": Optional[str],  // Enum: "A+", "A-", etc.
+        "genotype": Optional[str],     // Enum: "AA", "AS", etc.
+        "height": Optional[float],
+        "weight": Optional[float],
+        "test_date": date,
+        "lab_attendant_id": int,
+        "notes": Optional[str],
+        "created_at": datetime,
+        "updated_at": Optional[datetime]
+      }
+    ]
+    ```
+  - **Error Responses**:
+    - 401 Unauthorized: `{ "detail": "Invalid token" }`
+  - **Notes**: Log action “view_health_records”.
+
+- **GET /students/me/schedules**
+  - **Description**: Lists the student’s booked appointments.
+  - **Access**: Authenticated student
+  - **Request** (Query Parameters):
+    ```json
+    {
+      "skip": Optional[int],
+      "limit": Optional[int]
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    [
+      {
+        "schedule_id": int,
+        "doctor_id": int,
+        "student_id": int,
+        "availability_id": Optional[int],
+        "start_time": time,
+        "end_time": time,
+        "date": date,
+        "status": str,              // Enum: "booked", "completed", "cancelled"
+        "created_at": datetime
+      }
+    ]
+    ```
+  - **Error Responses**:
+    - 401 Unauthorized: `{ "detail": "Invalid token" }`
+  - **Notes**: Filter by `student_id` from JWT, log action “view_schedules”.
+
+- **POST /schedules**
+  - **Description**: Books an appointment for the student.
+  - **Access**: Authenticated student
+  - **Request**:
+    ```json
+    {
+      "doctor_id": int,          // Doctor to book with
+      "availability_id": int,    // FK to availabilities
+      "date": date,              // Appointment date
+      "start_time": time,        // Start time
+      "end_time": time           // End time
+    }
+    ```
+  - **Response** (201 Created):
+    ```json
+    {
+      "schedule_id": int,
+      "doctor_id": int,
+      "student_id": int,
+      "availability_id": int,
+      "start_time": time,
+      "end_time": time,
+      "date": date,
+      "status": str,
+      "created_at": datetime
+    }
+    ```
+  - **Error Responses**:
+    - 400 Bad Request: `{ "detail": "Invalid doctor or availability" }`
+    - 400 Bad Request: `{ "detail": "Time slot already booked" }`
+    - 401 Unauthorized: `{ "detail": "Invalid token" }`
+  - **Notes**: Validate `doctor_id`, `availability_id`, and time slot availability; set `student_id` from JWT; log action “book_schedule”.
+
+#### 4. Doctor Routes
+Manages doctor’s availability, clinic visits, complaints, diagnoses, and prescriptions.
+
+- **POST /availabilities**
+  - **Description**: Sets a doctor’s recurring availability (e.g., weekly slots).
+  - **Access**: Doctor only
+  - **Request**:
+    ```json
+    {
+      "day_of_week": str,        // Enum: "Monday", "Tuesday", etc.
+      "start_time": time,        // Start time (e.g., "09:00:00")
+      "end_time": time,          // End time (e.g., "11:00:00")
+      "status": Optional[str]    // Enum: "active", "inactive" (default: "active")
+    }
+    ```
+  - **Response** (201 Created):
+    ```json
+    {
+      "availability_id": int,
+      "doctor_id": int,
+      "day_of_week": str,
+      "start_time": time,
+      "end_time": time,
+      "status": str,
+      "created_at": datetime
+    }
+    ```
+  - **Error Responses**:
+    - 400 Bad Request: `{ "detail": "Invalid time range" }`
+    - 403 Forbidden: `{ "detail": "Doctor access required" }`
+  - **Notes**: Set `doctor_id` from JWT, validate `start_time` < `end_time`, log action “create_availability”.
+
+- **GET /availabilities**
+  - **Description**: Lists a doctor’s availabilities (or all for students).
+  - **Access**: Doctor, Student
+  - **Request** (Query Parameters):
+    ```json
+    {
+      "skip": Optional[int],
+      "limit": Optional[int],
+      "doctor_id": Optional[int]  // Filter by doctor (optional for students)
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    [
+      {
+        "availability_id": int,
+        "doctor_id": int,
+        "day_of_week": str,
+        "start_time": time,
+        "end_time": time,
+        "status": str,
+        "created_at": datetime
+      }
+    ]
+    ```
+  - **Error Responses**:
+    - 401 Unauthorized: `{ "detail": "Invalid token" }`
+  - **Notes**: For doctors, filter by JWT `user_id`; for students, allow filtering by `doctor_id`; log action “list_availabilities” for doctors.
+
+- **POST /visits**
+  - **Description**: Records a clinic visit (scheduled or walk-in).
+  - **Access**: Doctor only
+  - **Request**:
+    ```json
+    {
+      "student_id": int,         // Student being visited
+      "schedule_id": Optional[int],  // FK to appointment_schedules (null for walk-ins)
+      "visit_date": date,        // Date of visit
+      "status": Optional[str]    // Enum: "pending", "completed", "cancelled" (default: "pending")
+    }
+    ```
+  - **Response** (201 Created):
+    ```json
+    {
+      "visit_id": int,
+      "student_id": int,
+      "doctor_id": int,
+      "schedule_id": Optional[int],
+      "visit_date": date,
+      "status": str,
+      "created_at": datetime
+    }
+    ```
+  - **Error Responses**:
+    - 400 Bad Request: `{ "detail": "Invalid student or schedule" }`
+    - 403 Forbidden: `{ "detail  // Doctor access required" }`
+  - **Notes**: Set `doctor_id` from JWT, validate `student_id` and `schedule_id`, log action “create_visit”.
+
+- **POST /complaints**
+  - **Description**: Records a student’s complaint during a visit.
+  - **Access**: Doctor only
+  - **Request**:
+    ```json
+    {
+      "visit_id": int,              // FK to clinic_visits
+      "student_id": int,            // Student with complaint
+      "complaint_description": str   // Complaint details
+    }
+    ```
+  - **Response** (201 Created):
+    ```json
+    {
+      "complaint_id": int,
+      "visit_id": int,
+      "student_id": int,
+      "doctor_id": int,
+      "complaint_description": str,
+      "created_at": datetime
+    }
+    ```
+  - **Error Responses**:
+    - 400 Bad Request: `{ "detail": "Invalid visit or student" }`
+    - 403 Forbidden: `{ "detail": "Doctor access required" }`
+  - **Notes**: Set `doctor_id` from JWT, validate `visit_id` and `student_id`, log action “create_complaint”.
+
+- **POST /diagnoses**
+  - **Description**: Records a diagnosis for a visit.
+  - **Access**: Doctor only
+  - **Request**:
+    ```json
+    {
+      "visit_id": int,
+      "student_id": int,
+      "diagnosis_description": str,
+      "treatment_plan": Optional[str]
+    }
+    ```
+  - **Response** (201 Created):
+    ```json
+    {
+      "diagnosis_id": int,
+      "visit_id": int,
+      "student_id": int,
+      "doctor_id": int,
+      "diagnosis_description": str,
+      "treatment_plan": Optional[str],
+      "created_at": datetime
+    }
+    ```
+  - **Error Responses**:
+    - 400 Bad Request: `{ "detail": "Invalid visit or student" }`
+    - 403 Forbidden: `{ "detail": "Doctor access required" }`
+  - **Notes**: Set `doctor_id` from JWT, validate `visit_id` and `student_id`, log action “create_diagnosis”.
+
+- **POST /prescriptions**
+  - **Description**: Issues a prescription for a diagnosis.
+  - **Access**: Doctor only
+  - **Request**:
+    ```json
+    {
+      "diagnosis_id": int,
+      "student_id": int,
+      "drug_id": int,
+      "dosage": str,             // Dosage instructions (e.g., "1 tablet daily")
+      "instructions": Optional[str]  // Additional instructions
+    }
+    ```
+  - **Response** (201 Created):
+    ```json
+    {
+      "prescription_id": int,
+      "diagnosis_id": int,
+      "student_id": int,
+      "doctor_id": int,
+      "drug_id": int,
+      "dosage": str,
+      "instructions": Optional[str],
+      "created_at": datetime
+    }
+    ```
+  - **Error Responses**:
+    - 400 Bad Request: `{ "detail": "Invalid diagnosis, student, or drug" }`
+    - 403 Forbidden: `{ "detail": "Doctor access required" }`
+  - **Notes**: Set `doctor_id` from JWT, validate `diagnosis_id`, `student_id`, `drug_id`, log action “create_prescription”.
+
+- **GET /visits**
+  - **Description**: Lists a doctor’s visits (paginated).
+  - **Access**: Doctor only
+  - **Request** (Query Parameters):
+    ```json
+    {
+      "skip": Optional[int],
+      "limit": Optional[int]
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    [
+      {
+        "visit_id": int,
+        "student_id": int,
+        "doctor_id": int,
+        "schedule_id": Optional[int],
+        "visit_date": date,
+        "status": str,
+        "created_at": datetime
+      }
+    ]
+    ```
+  - **Error Responses**:
+    - 403 Forbidden: `{ "detail": "Doctor access required" }`
+  - **Notes**: Filter by `doctor_id` from JWT, log action “list_visits”.
+
+#### 5. Pharmacist Routes
+Manages drug dispensation and prescription viewing.
+
+- **POST /dispensations**
+  - **Description**: Records a drug dispensation for a prescription.
+  - **Access**: Pharmacist only
+  - **Request**:
+    ```json
+    {
+      "prescription_id": int,
+      "student_id": int,
+      "drug_id": int,
+      "quantity": int,           // Number of units dispensed
+      "dispense_date": date
+    }
+    ```
+  - **Response** (201 Created):
+    ```json
+    {
+      "dispensation_id": int,
+      "prescription_id": int,
+      "student_id": int,
+      "pharmacist_id": int,
+      "drug_id": int,
+      "quantity": int,
+      "dispense_date": date,
+      "created_at": datetime
+    }
+    ```
+  - **Error Responses**:
+    - 400 Bad Request: `{ "detail": "Invalid prescription, student, or drug" }`
+    - 403 Forbidden: `{ "detail": "Pharmacist access required" }`
+  - **Notes**: Set `pharmacist_id` from JWT, validate `prescription_id`, `student_id`, `drug_id`, update `Drugs.stock_level` (if tracked), log action “create_dispensation”.
+
+- **GET /prescriptions**
+  - **Description**: Lists prescriptions for dispensation (paginated).
+  - **Access**: Pharmacist only
+  - **Request** (Query Parameters):
+    ```json
+    {
+      "skip": Optional[int],
+      "limit": Optional[int]
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    [
+      {
+        "prescription_id": int,
+        "diagnosis_id": int,
+        "student_id": int,
+        "doctor_id": int,
+        "drug_id": int,
+        "dosage": str,
+        "instructions": Optional[str],
+        "created_at": datetime
+      }
+    ]
+    ```
+  - **Error Responses**:
+    - 403 Forbidden: `{ "detail": "Pharmacist access required" }`
+  - **Notes**: Log action “list_prescriptions”.
+
+#### 6. Lab Attendant Routes
+Manages health record creation and viewing.
+
+- **POST /health-records**
+  - **Description**: Records a student’s health status (e.g., blood group, genotype).
+  - **Access**: Lab Attendant only
+  - **Request**:
+    ```json
+    {
+      "student_id": int,
+      "blood_group": Optional[str],  // Enum: "A+", "A-", etc.
+      "genotype": Optional[str],     // Enum: "AA", "AS", etc.
+      "height": Optional[float],
+      "weight": Optional[float],
+      "test_date": date,
+      "notes": Optional[str]
+    }
+    ```
+  - **Response** (201 Created):
+    ```json
+    {
+      "health_record_id": int,
+      "student_id": int,
+      "blood_group": Optional[str],
+      "genotype": Optional[str],
+      "height": Optional[float],
+      "weight": Optional[float],
+      "test_date": date,
+      "lab_attendant_id": int,
+      "notes": Optional[str],
+      "created_at": datetime,
+      "updated_at": Optional[datetime]
+    }
+    ```
+  - **Error Responses**:
+    - 400 Bad Request: `{ "detail": "Invalid student" }`
+    - 403 Forbidden: `{ "detail": "Lab Attendant access required" }`
+  - **Notes**: Set `lab_attendant_id` from JWT, validate `student_id`, log action “create_health_record”.
+
+- **GET /health-records/{student_id}**
+  - **Description**: Lists a student’s health records.
+  - **Access**: Lab Attendant, Doctor
+  - **Request**: Path parameter `student_id` (int)
+  - **Response** (200 OK):
+    ```json
+    [
+      {
+        "health_record_id": int,
+        "student_id": int,
+        "blood_group": Optional[str],
+        "genotype": Optional[str],
+        "height": Optional[float],
+        "weight": Optional[float],
+        "test_date": date,
+        "lab_attendant_id": int,
+        "notes": Optional[str],
+        "created_at": datetime,
+        "updated_at": Optional[datetime]
+      }
+    ]
+    ```
+  - **Error Responses**:
+    - 404 Not Found: `{ "detail": "Student not found" }`
+    - 403 Forbidden: `{ "detail": "Lab Attendant or Doctor access required" }`
+  - **Notes**: Log action “view_health_records”.
+
+#### 7. General Routes
+Shared read-only endpoints for common data.
+
+- **GET /drugs**
+  - **Description**: Lists all drugs (for doctors, pharmacists).
+  - **Access**: Doctor, Pharmacist
+  - **Request** (Query Parameters):
+    ```json
+    {
+      "skip": Optional[int],
+      "limit": Optional[int]
+    }
+    ```
+  - **Response** (200 OK):
+    ```json
+    [
+      {
+        "drug_id": int,
+        "name": str,
+        "description": Optional[str],
+        "stock_level": Optional[int],
+        "created_at": datetime,
+        "updated_at": Optional[datetime]
+      }
+    ]
+    ```
+  - **Error Responses**:
+    - 403 Forbidden: `{ "detail": "Doctor or Pharmacist access required" }`
+  - **Notes**: Log action “list_drugs”.
+
+- **GET /students/{student_id}**
+  - **Description**: Gets a student’s details (for clinical staff).
+  - **Access**: Doctor, Pharmacist, Lab Attendant
+  - **Request**: Path parameter `student_id` (int)
+  - **Response** (200 OK):
+    ```json
+    {
+      "student_id": int,
+      "matriculation_number": str,
+      "first_name": str,
+      "surname": str,
+      "email": str,
+      "session_id": int,
+      "phone": str,
+      "date_of_birth": date,
+      "gender": str,
+      "address": Optional[str],
+      "faculty_id": int,
+      "department_id": int,
+      "level_id": int,
+      "emergency_contact": Optional[str],
+      "profile_picture": Optional[str],
+      "status": str,
+      "created_at": datetime,
+      "updated_at": Optional[datetime],
+      "last_login": Optional[datetime]
+    }
+    ```
+  - **Error Responses**:
+    - 404 Not Found: `{ "detail": "Student not found" }`
+    - 403 Forbidden: `{ "detail": "Authorized access required" }`
+  - **Notes**: Log action “view_student”.
+
+### Summary of Routes
+- **Total Endpoints**: 27
+  - Authentication: 2
+  - Admin: 12
+  - Student: 5
+  - Doctor: 7
+  - Pharmacist: 2
+  - Lab Attendant: 2
+  - General: 2
+- **Categories**:
+  - Authentication: User and student login.
+  - Admin: User management and static data (faculties, departments, etc.).
+  - Student: Profile, digital card, health records, appointment booking.
+  - Doctor: Availability, visits, complaints, diagnoses, prescriptions.
+  - Pharmacist: Drug dispensation, prescription viewing.
+  - Lab Attendant: Health record management.
+  - General: Shared data (drugs, student details).
+
+### Implementation Guidance
+- **Start Small**: Begin with authentication routes (`/auth/user/login`, `/auth/student/login`) and one route per category (e.g., `/users` for admin, `/students/me` for student, `/prescriptions` for doctor). This ensures core functionality before scaling.
+- **Pydantic Models**: Convert the data structures above into Pydantic models for validation. Example for `/prescriptions`:
+  ```python
+  from pydantic import BaseModel
+  from typing import Optional
+
+  class PrescriptionCreate(BaseModel):
+      diagnosis_id: int
+      student_id: int
+      drug_id: int
+      dosage: str
+      instructions: Optional[str] = None
+
+  class PrescriptionResponse(BaseModel):
+      prescription_id: int
+      diagnosis_id: int
+      student_id: int
+      doctor_id: int
+      drug_id: int
+      dosage: str
+      instructions: Optional[str]
+      created_at: datetime
+  ```
+- **Validation**:
+  - Check `status=active` for users and students.
+  - Validate FKs (e.g., `student_id`, `drug_id`) exist.
+  - Ensure time slots don’t overlap in `AppointmentSchedule`.
+- **Logging**: Use `AccessLog` for all write operations (POST, PUT, DELETE) and sensitive reads (e.g., student details).
+- **Security**:
+  - Use `passlib` (bcrypt) for password hashing.
+  - Implement JWT with `python-jose`.
+  - Enforce role-based access (e.g., `require_role("doctor")` for doctor routes).
+
+### Next Steps
+1. **Confirm Framework**: Verify you’re using FastAPI (or specify Flask/other). If FastAPI, confirm async vs. sync SQLAlchemy.
+2. **Review Data Structures**: Check the request/response structures above. Let me know if any fields need adjustment (e.g., add fields, change types).
+3. **Start Routing**: Implement a few routes (e.g., authentication and one per role) using the data structures. Share the code, and I’ll review for correctness, security, and alignment with the schema.
+4. **Additional Support**:
+   - Need Pydantic models? I can generate them for all endpoints.
+   - Want sample SQL for testing? I can provide inserts for each table.
+   - Need Alembic migration scripts? I can create an initial migration for `models.py`.
+   - Want an ERD? I can describe one or suggest tools (e.g., DBeaver).
+
+Please confirm the framework and any tweaks to the data structures. Once you’re ready, share your route implementations, and I’ll provide detailed feedback to ensure they’re robust. If you have questions about specific endpoints or need more details, just ask!
